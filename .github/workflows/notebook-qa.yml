@@ -359,15 +359,24 @@ jobs:
           path: .tmp/${{ github.run_id }}-qa-tools
           persist-credentials: false
 
-      # Load QA config to check if execute is disabled
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Install QA tools
+        working-directory: .tmp/${{ github.run_id }}-qa-tools
+        run: uv sync --frozen --no-install-project
+
+      # Load QA config to check if execute is disabled and to validate performance thresholds
       - name: Load QA config
         id: config
         env:
           ALL_NOTEBOOKS: ${{ needs.collect.outputs.notebooks }}
         run: |
-          python3 .tmp/${{ github.run_id }}-qa-tools/process-notebooks/checkers/write_gha_config.py \
+          .tmp/${{ github.run_id }}-qa-tools/.venv/bin/python \
+            .tmp/${{ github.run_id }}-qa-tools/process-notebooks/checkers/write_gha_config.py \
             --checks execute \
-            --config .github/notebook-qa.yml
+            --config .github/notebook-qa.yml \
+            --performance-tests
 
       - name: Skip execution check
         if: steps.config.outputs.skip_execute == 'true' || steps.config.outputs.notebooks_execute == ''
@@ -391,7 +400,7 @@ jobs:
 
       - name: Install execution tools
         if: steps.config.outputs.skip_execute != 'true' && steps.config.outputs.notebooks_execute != ''
-        run: pip install ploomber-engine psutil matplotlib pyyaml
+        run: pip install ploomber-engine psutil matplotlib
 
       - name: Configure CDS API
         if: steps.config.outputs.skip_execute != 'true' && steps.config.outputs.notebooks_execute != '' && env.CDSAPI_KEY != ''
@@ -399,69 +408,27 @@ jobs:
           echo "url: https://cds.climate.copernicus.eu/api" > ~/.cdsapirc
           echo "key: $CDSAPI_KEY" >> ~/.cdsapirc
 
-      - name: (2.2.1, 2.2.4, 2.2.6) Execute notebooks with memory profiling
+      - name: (2.2.1, 2.2.4, 2.2.6, 2.3.1, 2.3.2) Execute notebooks and check performance
         id: execute_notebooks
         if: steps.config.outputs.skip_execute != 'true' && steps.config.outputs.notebooks_execute != ''
         env:
           NOTEBOOKS_EXECUTE: ${{ steps.config.outputs.notebooks_execute }}
+          MAX_CELL_MEMORY_MB_WARNING: ${{ steps.config.outputs.max_cell_memory_mb_warning }}
+          MAX_CELL_MEMORY_MB_FAIL: ${{ steps.config.outputs.max_cell_memory_mb_fail }}
+          MAX_CELL_RUNTIME_SECONDS_WARNING: ${{ steps.config.outputs.max_cell_runtime_seconds_warning }}
+          MAX_CELL_RUNTIME_SECONDS_FAIL: ${{ steps.config.outputs.max_cell_runtime_seconds_fail }}
         run: |
           set -o pipefail
-          python 2>&1 << 'EOF' | tee "$RUNNER_TEMP/qa_execute.log"
-          import os
-          import csv
-          from pathlib import Path
-          from ploomber_engine import execute_notebook
-          from ploomber_engine.profiling import get_profiling_data
+          mapfile -t nbs <<< "$NOTEBOOKS_EXECUTE"
+          python .tmp/${{ github.run_id }}-qa-tools/process-notebooks/checkers/execute_notebooks.py \
+            --output-dir "$QA_OUTPUT_DIR" \
+            "${nbs[@]}" 2>&1 | tee "$RUNNER_TEMP/qa_execute.log"
 
-          notebooks = [nb for nb in os.environ['NOTEBOOKS_EXECUTE'].splitlines() if nb.strip()]
-          output_dir = os.environ.get('QA_OUTPUT_DIR', 'qa_outputs')
-          Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-          failed = []
-          for nb in notebooks:
-              if not nb.strip():
-                  continue
-              print(f"\n{'='*60}")
-              print(f"Executing: {nb}")
-              print('='*60)
-              try:
-                  result = execute_notebook(
-                      nb,
-                      output_path=nb,
-                      profile_memory=True,
-                      progress_bar=False
-                  )
-                  # Save profiling data from cell metadata
-                  data = get_profiling_data(result)
-                  if data.get('memory') or data.get('runtime'):
-                      csv_path = Path(output_dir) / f"{Path(nb).stem}-profiling-data.csv"
-                      with open(csv_path, 'w', newline='') as f:
-                          writer = csv.DictWriter(f, fieldnames=['cell', 'memory', 'runtime'])
-                          writer.writeheader()
-                          for i, (mem, time) in enumerate(zip(
-                              data.get('memory', []),
-                              data.get('runtime', [])
-                          )):
-                              writer.writerow({'cell': i, 'memory': mem, 'runtime': time})
-                  else:
-                      print(f"::warning::No profiling data returned for {nb}")
-                  print(f"✅ {nb} executed successfully")
-              except Exception as e:
-                  print(f"❌ {nb} failed: {e}")
-                  failed.append(nb)
-
-          if failed:
-              print(f"\n❌ {len(failed)} notebook(s) failed to execute:")
-              for nb in failed:
-                  print(f"  - {nb}")
-              exit(1)
-          EOF
-
-      - name: Upload profiling artifacts
+      - name: Upload performance artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: notebook-profiling-${{ github.run_id }}
+          name: notebook-performance-${{ github.run_id }}
           path: ${{ env.QA_OUTPUT_DIR }}
           if-no-files-found: ignore
 
