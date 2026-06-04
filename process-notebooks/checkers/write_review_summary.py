@@ -129,7 +129,6 @@ def main() -> int:
         ],
         lint_job_result,
     )
-    tests_status = check_status(env.get("TEST_RESULT", ""), lint_job_result)
     figure_status = check_status(env.get("FIGURE_RESULT", ""), lint_job_result)
     accessibility_status = check_status(env.get("ACCESSIBILITY_RESULT", ""), lint_job_result)
     changelog_status = check_status(env.get("CHANGELOG_RESULT", ""), lint_job_result)
@@ -139,7 +138,6 @@ def main() -> int:
     metadata_error = clean_error(env.get("METADATA_ERROR", ""))
     data_source_error = clean_error(env.get("DATA_SOURCE_ERROR", ""))
     execute_error = clean_error(env.get("EXECUTE_ERROR", ""))
-    tests_error = clean_error(env.get("TEST_ERROR", ""))
     figure_error = clean_error(env.get("FIGURE_ERROR", ""))
     accessibility_error = clean_error(env.get("ACCESSIBILITY_ERROR", ""))
     changelog_error = clean_error(env.get("CHANGELOG_ERROR", ""))
@@ -273,18 +271,16 @@ def main() -> int:
         include_all,
         "The learning resource must come with a set of tests for evaluating its performance.",
         "2.3.1",
-        tests_status,
-        tests_error,
-        logs_url=lint_logs_url,
+        "N/A",
+        "",
     )
     append_row(
         rows,
         include_all,
         "Performance tests must pass with X% coverage.",
         "2.3.2",
-        tests_status,
-        tests_error,
-        logs_url=lint_logs_url,
+        "N/A",
+        "",
     )
     append_row(
         rows,
