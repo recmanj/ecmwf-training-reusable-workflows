@@ -21,13 +21,12 @@ Checks are split across three jobs: a fast `lint` job for static checks, an `exe
 
 **Link availability** (`links`) — Runs `lychee` against all notebooks. Every URL in markdown and code cells must be reachable.
 
-**Notebook execution** (`execute`) — Executes each notebook end-to-end with `ploomber-engine` inside a Conda environment built from the consuming repository's `environment.yml`. The notebook must run without errors. Memory usage and runtime are profiled per cell and uploaded as an artifact. The runner and timeout are configurable via the `execution_runner` and `execution_timeout` inputs.
+**Notebook execution** (`execute`) — Executes each notebook end-to-end with `ploomber-engine` inside a Conda environment built from the consuming repository's `environment.yml`. The notebook must run without errors. Memory usage and runtime are profiled per cell, checked against performance-test thresholds, and uploaded as artifacts. The runner and timeout are configurable via the `execution_runner` and `execution_timeout` inputs.
 
 **Data source availability** (`data_source`) — Warning-only check. Inspects code cells for how data is sourced. If data is fetched but not via approved sources (`cdsapi`, `earthkit`, or the CDS/ADS APIs), it emits a warning annotation. This check never fails the workflow.
 
 **Version metadata** (`metadata`) — Looks for `**Last updated:** YYYY-MM-DD` (e.g. `**Last updated:** 2025-01-15`) in the first markdown cell(s) before any code cell. Falls back to a `README.md` in the same directory if not found in the notebook.
 
-**Tests & coverage** (`tests`) — If test files exist (`test_*.py`, `*_test.py`, `tests/*.py`), runs `pytest` with coverage. Coverage must meet the configured threshold (default 80%). When no test files exist the check is skipped by default, unless `require_tests: true` is set in the config.
 
 **Accessibility** (`accessibility`) — Runs WCAG compliance checks on notebooks using `jupyterlab-a11y-checker`.
 
@@ -127,9 +126,13 @@ notebooks:
     skip:
       - figures
 
-# Test configuration
-require_tests: false     # Set true to fail when no test files exist
-coverage_threshold: 80   # Minimum coverage percentage for pytest-cov
+# Performance-test thresholds used during notebook execution.
+# Defaults are strict for learner-suitable notebooks. Set any value to null to disable it.
+performance_tests:
+  max_cell_memory_mb_warning: 512
+  max_cell_memory_mb_fail: 1024
+  max_cell_runtime_seconds_warning: 60
+  max_cell_runtime_seconds_fail: 180
 
 # Pynblint rule configuration
 pynblint:
@@ -142,7 +145,7 @@ The baseline pynblint exclusion list suppresses `missing-h1-MD-heading` (MyST no
 
 Available pynblint rule slugs: `non-linear-execution`, `notebook-too-long`, `untitled-notebook`, `non-portable-chars-in-nb-name`, `notebook-name-too-long`, `imports-beyond-first-cell`, `missing-h1-MD-heading`, `missing-opening-MD-text`, `missing-closing-MD-text`, `too-few-MD-cells`, `duplicate-notebook-not-renamed`, `invalid-python-syntax`, `non-executed-notebook`, `non-executed-cells`, `empty-cells`, `long-multiline-python-comment`, `cell-too-long`
 
-Valid check IDs: `linter`, `formatter`, `pynblint`, `links`, `tests`, `figures`, `metadata`, `data_source`, `accessibility`, `license`, `changelog`, `execute`
+Valid check IDs: `linter`, `formatter`, `pynblint`, `links`, `figures`, `metadata`, `data_source`, `accessibility`, `license`, `changelog`, `execute`
 
 
 #### QA criteria reference
@@ -157,8 +160,8 @@ Valid check IDs: `linter`, `formatter`, `pynblint`, `links`, `tests`, `figures`,
 | 2.2.3 | Code style                | ruff, pynblint         |
 | 2.2.4 | Execution profiling       | ploomber-engine        |
 | 2.2.6 | Memory profiling          | ploomber-engine        |
-| 2.3.1 | Test existence            | pytest                 |
-| 2.3.2 | Coverage threshold        | pytest-cov             |
+| 2.3.1 | Performance tests available | ploomber-engine profiling |
+| 2.3.2 | Performance tests coverage | resource threshold checks |
 | 3.1.3 | Accessibility             | jupyterlab-a11y-checker|
 | 3.3.2 | Figure attribution        | figure_checker.py      |
 | 4.2.3 | Changelog                 | CHANGELOG.md existence |
@@ -166,7 +169,7 @@ Valid check IDs: `linter`, `formatter`, `pynblint`, `links`, `tests`, `figures`,
 
 ### Notebook execution environment
 
-The notebook execution check builds a Conda environment from an `environment.yml` file in the consuming repository root. Ensure this file exists and declares all dependencies required to run the notebooks. Execution tooling (`ploomber-engine`, `psutil`, `matplotlib`, `pyyaml`) is installed automatically on top of this environment.
+The notebook execution check builds a Conda environment from an `environment.yml` file in the consuming repository root. Ensure this file exists and declares all dependencies required to run the notebooks. Execution tooling (`ploomber-engine`, `psutil`, `matplotlib`) is installed automatically on top of this environment.
 
 
 ### How to configure access to cdsapi for notebook execution check
