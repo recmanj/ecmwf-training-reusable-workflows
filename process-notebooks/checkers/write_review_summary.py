@@ -271,16 +271,18 @@ def main() -> int:
         include_all,
         "The learning resource must come with a set of tests for evaluating its performance.",
         "2.3.1",
-        "N/A",
-        "",
+        execute_status,
+        execute_error,
+        logs_url=execute_logs_url,
     )
     append_row(
         rows,
         include_all,
         "Performance tests must pass with X% coverage.",
         "2.3.2",
-        "N/A",
-        "",
+        execute_status,
+        execute_error,
+        logs_url=execute_logs_url,
     )
     append_row(
         rows,

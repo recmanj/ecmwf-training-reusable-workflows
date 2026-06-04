@@ -7,15 +7,16 @@ the results as GitHub Actions step outputs.
 
 Usage (lint job — all checks + extras):
     python write_gha_config.py \
-        --checks linter formatter pynblint links tests figures \
+        --checks linter formatter pynblint links figures \
                  metadata accessibility license changelog \
         --config .github/notebook-qa.yml \
         --extras
 
-Usage (execute job — single check):
+Usage (execute job — execution check + performance-test thresholds):
     python3 write_gha_config.py \
         --checks execute \
-        --config .github/notebook-qa.yml
+        --config .github/notebook-qa.yml \
+        --performance-tests
 
 Reads the notebook list from the ALL_NOTEBOOKS environment variable
 (newline-separated paths).
@@ -25,7 +26,12 @@ import argparse
 import os
 import sys
 
-from qa_config import get_filtered_notebooks_for_check, get_pynblint_exclude, load_config
+from qa_config import (
+    get_filtered_notebooks_for_check,
+    get_performance_test_thresholds,
+    get_pynblint_exclude,
+    load_config,
+)
 
 
 def parse_notebook_list(raw: str) -> list[str]:
@@ -49,8 +55,11 @@ def main():
     parser = argparse.ArgumentParser(description="Write QA config outputs for GitHub Actions")
     parser.add_argument("--checks", nargs="+", required=True, help="Check IDs to produce output for")
     parser.add_argument("--config", default=".github/notebook-qa.yml", help="Path to QA config file")
+    parser.add_argument("--extras", action="store_true", help="Also write pynblint config")
     parser.add_argument(
-        "--extras", action="store_true", help="Also write require_tests and coverage_threshold"
+        "--performance-tests",
+        action="store_true",
+        help="Also write performance-test threshold outputs",
     )
     args = parser.parse_args()
 
@@ -70,13 +79,18 @@ def main():
             write_multiline_output(out, f"notebooks_{check}", filtered)
 
         if args.extras:
-            require = config.get("require_tests", False)
-            threshold = config.get("coverage_threshold", 80)
-            out.write(f"require_tests={'true' if require else 'false'}\n")
-            out.write(f"coverage_threshold={threshold}\n")
-
             pynblint_exclude = get_pynblint_exclude(config)
             out.write(f"pynblint_exclude={pynblint_exclude}\n")
+
+        if args.performance_tests:
+            try:
+                thresholds = get_performance_test_thresholds(config)
+            except ValueError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+
+            for key, value in thresholds.items():
+                out.write(f"{key}={'' if value is None else value}\n")
 
 
 if __name__ == "__main__":

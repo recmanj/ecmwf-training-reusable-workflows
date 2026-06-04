@@ -41,6 +41,13 @@ except ImportError:
 # Baseline pynblint rules to exclude across all consuming repos.
 PYNBLINT_DEFAULT_EXCLUDE = ["missing-h1-MD-heading", "imports-beyond-first-cell"]
 
+PERFORMANCE_TEST_DEFAULTS = {
+    "max_cell_memory_mb_warning": 512,
+    "max_cell_memory_mb_fail": 1024,
+    "max_cell_runtime_seconds_warning": 60,
+    "max_cell_runtime_seconds_fail": 180,
+}
+
 
 def _normalize_path(path: str) -> str:
     """Remove leading ./ from a path for consistent fnmatch matching."""
@@ -184,6 +191,65 @@ def get_filtered_notebooks_for_check(
 
     filtered = filter_notebooks(config, check_id, notebooks)
     return (False, filtered)
+
+
+def _validate_optional_positive_number(key: str, value: Any) -> float | int | None:
+    """Validate a performance-test threshold value."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"performance_tests.{key} must be a positive number or null")
+    if value <= 0:
+        raise ValueError(f"performance_tests.{key} must be positive")
+    return value
+
+
+def get_performance_test_thresholds(config: dict[str, Any]) -> dict[str, float | int | None]:
+    """Return validated performance-test thresholds with strict defaults.
+
+    Config format in .github/notebook-qa.yml:
+        performance_tests:
+          max_cell_memory_mb_warning: 512
+          max_cell_memory_mb_fail: 1024
+          max_cell_runtime_seconds_warning: 60
+          max_cell_runtime_seconds_fail: 180
+
+    Any threshold can be disabled by setting it to null. If the
+    performance_tests section is omitted entirely, strict defaults apply.
+    """
+    performance_tests = config.get("performance_tests", {})
+    if performance_tests is None:
+        performance_tests = {}
+    if not isinstance(performance_tests, dict):
+        raise ValueError("performance_tests must be a mapping")
+
+    thresholds = PERFORMANCE_TEST_DEFAULTS | performance_tests
+    unknown_keys = set(thresholds) - set(PERFORMANCE_TEST_DEFAULTS)
+    if unknown_keys:
+        unknown = ", ".join(sorted(unknown_keys))
+        raise ValueError(f"Unknown performance_tests key(s): {unknown}")
+
+    validated = {
+        key: _validate_optional_positive_number(key, thresholds[key]) for key in PERFORMANCE_TEST_DEFAULTS
+    }
+
+    memory_warning = validated["max_cell_memory_mb_warning"]
+    memory_fail = validated["max_cell_memory_mb_fail"]
+    if memory_warning is not None and memory_fail is not None and memory_warning > memory_fail:
+        raise ValueError(
+            "performance_tests.max_cell_memory_mb_warning must be less than or equal to "
+            "max_cell_memory_mb_fail"
+        )
+
+    runtime_warning = validated["max_cell_runtime_seconds_warning"]
+    runtime_fail = validated["max_cell_runtime_seconds_fail"]
+    if runtime_warning is not None and runtime_fail is not None and runtime_warning > runtime_fail:
+        raise ValueError(
+            "performance_tests.max_cell_runtime_seconds_warning must be less than or equal to "
+            "max_cell_runtime_seconds_fail"
+        )
+
+    return validated
 
 
 def get_pynblint_exclude(config: dict[str, Any]) -> str:
