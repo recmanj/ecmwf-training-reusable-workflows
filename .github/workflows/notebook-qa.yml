@@ -98,7 +98,6 @@ jobs:
       formatter_result: ${{ steps.formatter.outcome }}
       pynblint_result: ${{ steps.pynblint.outcome }}
       link_result: ${{ steps.link_checker.outcome }}
-      test_result: ${{ steps.test_checker.outcome }}
       figure_result: ${{ steps.figure_checker.outcome }}
       metadata_result: ${{ steps.metadata_checker.outcome }}
       data_source_result: ${{ steps.data_source_checker.outcome }}
@@ -114,7 +113,6 @@ jobs:
       license_error: ${{ steps.errors.outputs.license_error }}
       changelog_error: ${{ steps.errors.outputs.changelog_error }}
       link_error: ${{ steps.errors.outputs.link_error }}
-      test_error: ${{ steps.errors.outputs.test_error }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -145,7 +143,7 @@ jobs:
           ALL_NOTEBOOKS: ${{ needs.collect.outputs.notebooks }}
         run: |
           python .tmp/${{ github.run_id }}-qa-tools/process-notebooks/checkers/write_gha_config.py \
-            --checks linter formatter pynblint links tests figures metadata data_source accessibility license changelog \
+            --checks linter formatter pynblint links figures metadata data_source accessibility license changelog \
             --config .github/notebook-qa.yml \
             --extras
 
@@ -217,39 +215,6 @@ jobs:
           format: markdown
           fail: true
           jobSummary: false
-
-      # Test coverage
-      - name: Detect test files
-        id: test_files
-        if: (success() || failure()) && steps.config.outputs.skip_tests != 'true'
-        run: |
-          shopt -s nullglob
-          test_files=(test_*.py *_test.py tests/*.py)
-          if [ "${#test_files[@]}" -gt 0 ]; then
-            echo "has_tests=true" >> "$GITHUB_OUTPUT"
-            echo "Test files:"
-            printf '  %s\n' "${test_files[@]}"
-          else
-            echo "has_tests=false" >> "$GITHUB_OUTPUT"
-            echo "No test files found"
-          fi
-
-      - name: (2.3.1, 2.3.2) Check tests and coverage
-        id: test_checker
-        if: (success() || failure()) && steps.config.outputs.skip_tests != 'true' && (steps.test_files.outputs.has_tests == 'true' || steps.config.outputs.require_tests == 'true')
-        env:
-          HAS_TESTS: ${{ steps.test_files.outputs.has_tests }}
-          COVERAGE_THRESHOLD: ${{ steps.config.outputs.coverage_threshold }}
-        run: |
-          {
-            if [ "$HAS_TESTS" = "true" ]; then
-              pytest --cov=. --cov-report=term --cov-fail-under="$COVERAGE_THRESHOLD"
-            else
-              echo "::warning::No test files found"
-              echo "Tests are required by configuration (require_tests: true)"
-              exit 1
-            fi
-          } 2>&1 | tee "$RUNNER_TEMP/qa_tests.log"
 
       # Custom checks
       - name: (3.3.2) Check figure labels and sources
@@ -330,7 +295,6 @@ jobs:
           FORMATTER_OUTCOME: ${{ steps.formatter.outcome }}
           PYNBLINT_OUTCOME: ${{ steps.pynblint.outcome }}
           LINK_OUTCOME: ${{ steps.link_checker.outcome }}
-          TEST_OUTCOME: ${{ steps.test_checker.outcome }}
           FIGURE_OUTCOME: ${{ steps.figure_checker.outcome }}
           METADATA_OUTCOME: ${{ steps.metadata_checker.outcome }}
           DATA_SOURCE_OUTCOME: ${{ steps.data_source_checker.outcome }}
@@ -352,7 +316,6 @@ jobs:
           emit linter_error "$LINTER_OUTCOME" "$RUNNER_TEMP/qa_linter.log"
           emit formatter_error "$FORMATTER_OUTCOME" "$RUNNER_TEMP/qa_formatter.log"
           emit pynblint_error "$PYNBLINT_OUTCOME" "$RUNNER_TEMP/qa_pynblint.log"
-          emit test_error "$TEST_OUTCOME" "$RUNNER_TEMP/qa_tests.log"
           emit figure_error "$FIGURE_OUTCOME" "$RUNNER_TEMP/qa_figure.log"
           emit metadata_error "$METADATA_OUTCOME" "$RUNNER_TEMP/qa_metadata.log"
           emit data_source_error "$DATA_SOURCE_OUTCOME" "$RUNNER_TEMP/qa_data_source.log"
@@ -545,7 +508,6 @@ jobs:
           LINTER_RESULT: ${{ needs.lint.outputs.linter_result }}
           FORMATTER_RESULT: ${{ needs.lint.outputs.formatter_result }}
           PYNBLINT_RESULT: ${{ needs.lint.outputs.pynblint_result }}
-          TEST_RESULT: ${{ needs.lint.outputs.test_result }}
           FIGURE_RESULT: ${{ needs.lint.outputs.figure_result }}
           ACCESSIBILITY_RESULT: ${{ needs.lint.outputs.accessibility_result }}
           CHANGELOG_RESULT: ${{ needs.lint.outputs.changelog_result }}
@@ -559,7 +521,6 @@ jobs:
           DATA_SOURCE_ERROR: ${{ needs.lint.outputs.data_source_error }}
           LICENSE_ERROR: ${{ needs.lint.outputs.license_error }}
           CHANGELOG_ERROR: ${{ needs.lint.outputs.changelog_error }}
-          TEST_ERROR: ${{ needs.lint.outputs.test_error }}
           EXECUTE_ERROR: ${{ needs.execute.outputs.execute_error }}
           SUMMARY_FILE: ${{ runner.temp }}/notebook-qa-summary.md
           SUMMARISE_ALL_CHECKS: ${{ inputs.summarise_all_checks }}

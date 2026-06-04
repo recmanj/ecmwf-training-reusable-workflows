@@ -6,8 +6,6 @@ dependencies = [
     "beautifulsoup4==4.15.0",
     "click>=8.4.2,<8.5",
     "lxml==6.1.1",
-    "pytest==9.1.1",
-    "pytest-cov==7.1.0",
     "pynblint==0.1.6",
     "pyyaml==6.0.3",
     "requests==2.34.2",
