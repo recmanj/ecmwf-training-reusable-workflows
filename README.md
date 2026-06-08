@@ -61,6 +61,11 @@ on:
         required: false
         type: string
         default: ""
+      qa_tools_ref:
+        description: "QA tools branch, tag, or commit SHA (default: the reusable workflow's own commit)"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -71,11 +76,12 @@ jobs:
     uses: ecmwf-training/reusable-workflows/.github/workflows/notebook-qa.yml@main
     with:
       notebooks: ${{ inputs.notebooks || '' }}
+      qa_tools_ref: ${{ inputs.qa_tools_ref || '' }}
       pr_comment_summary: true
     secrets: inherit
 ```
 
-This sets up automated checks on new pull requests and merges/pushes into `develop` branch. It also allows manual Action runs in the GitHub Actions UI.
+This sets up automated checks on new pull requests and merges/pushes into `develop` branch. It also allows manual Action runs in the GitHub Actions UI. Use `qa_tools_ref` when testing changes to the QA tooling from a feature branch.
 
 The workflow writes the automated review table to the GitHub Actions job summary and, by default, updates a single managed comment on pull requests. Set `pr_comment_summary: false` to disable PR comments. The caller workflow must grant `pull-requests: write` for PR comments to work; reusable workflows cannot elevate the caller's `GITHUB_TOKEN` permissions. Pull requests from forks may still receive read-only tokens depending on the target repository settings.
 
