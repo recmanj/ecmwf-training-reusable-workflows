@@ -123,7 +123,8 @@ jobs:
         with:
           repository: ${{ inputs.qa_tools_repo }}
           # Default to the reusable workflow's own commit so pinned callers get matching tools
-          ref: ${{ inputs.qa_tools_ref || github.job_workflow_sha }}
+          # (job.workflow_sha, not github.job_workflow_sha, which is always empty: actions/runner#2417)
+          ref: ${{ inputs.qa_tools_ref || job.workflow_sha }}
           path: .tmp/${{ github.run_id }}-qa-tools
           persist-credentials: false
 
@@ -357,7 +358,8 @@ jobs:
         with:
           repository: ${{ inputs.qa_tools_repo }}
           # Default to the reusable workflow's own commit so pinned callers get matching tools
-          ref: ${{ inputs.qa_tools_ref || github.job_workflow_sha }}
+          # (job.workflow_sha, not github.job_workflow_sha, which is always empty: actions/runner#2417)
+          ref: ${{ inputs.qa_tools_ref || job.workflow_sha }}
           path: .tmp/${{ github.run_id }}-qa-tools
           persist-credentials: false
 
@@ -460,7 +462,8 @@ jobs:
         with:
           repository: ${{ inputs.qa_tools_repo }}
           # Default to the reusable workflow's own commit so pinned callers get matching tools
-          ref: ${{ inputs.qa_tools_ref || github.job_workflow_sha }}
+          # (job.workflow_sha, not github.job_workflow_sha, which is always empty: actions/runner#2417)
+          ref: ${{ inputs.qa_tools_ref || job.workflow_sha }}
           path: .tmp/${{ github.run_id }}-qa-tools
           persist-credentials: false
 
