@@ -19,7 +19,7 @@ Checks are split across three jobs: a fast `lint` job for static checks, an `exe
 
 **Notebook linting** (`pynblint`) — Runs `pynblint` on each notebook. Checks notebook-level quality issues such as non-linear execution order, empty cells, or untitled notebooks.
 
-**Link availability** (`links`) — Runs `lychee` against all notebooks. Every URL in markdown and code cells must be reachable.
+**Link availability** (`links`) — Runs `lychee` against all notebooks. Every URL in markdown and code cells and in rendered (HTML/markdown) outputs must be reachable. Plain-text outputs are not checked, since library reprs truncate long values into URLs that never existed.
 
 **Notebook execution** (`execute`) — Executes each notebook end-to-end with `ploomber-engine` inside a Conda environment built from the consuming repository's `environment.yml`. The notebook must run without errors. Memory usage and runtime are profiled per cell and uploaded as an artifact. The runner and timeout are configurable via the `execution_runner` and `execution_timeout` inputs.
 

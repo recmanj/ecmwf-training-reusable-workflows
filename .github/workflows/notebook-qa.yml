@@ -206,15 +206,27 @@ jobs:
           exit $failed
           } 2>&1 | tee "$RUNNER_TEMP/qa_pynblint.log"
 
-      # Link checking with lychee (fast, Rust-based)
+      # Link checking with lychee (fast, Rust-based), on plain-text views that hold the notebook
+      # sources and rendered outputs but not text outputs (truncated reprs give bogus URLs)
+      - name: Prepare link-check views
+        id: link_views
+        if: (success() || failure()) && steps.config.outputs.skip_links != 'true' && steps.config.outputs.notebooks_links != ''
+        env:
+          NOTEBOOKS: ${{ steps.config.outputs.notebooks_links }}
+        run: |
+          mapfile -t nbs <<< "$NOTEBOOKS"
+          views=$(python .tmp/${{ github.run_id }}-qa-tools/process-notebooks/checkers/write_link_views.py \
+            --output-dir "$RUNNER_TEMP/link-views" "${nbs[@]}")
+          echo "files=${views//$'\n'/ }" >> "$GITHUB_OUTPUT"
+
       - name: (1.2.3) Check links
         id: link_checker
-        if: (success() || failure()) && steps.config.outputs.skip_links != 'true' && steps.config.outputs.notebooks_links != ''
+        if: (success() || failure()) && steps.link_views.outputs.files != ''
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           # no --verbose: lychee only lists working redirects (3xx -> 2xx) in verbose mode,
           # and they would leak into the harvested error summary below
-          args: --no-progress ${{ steps.config.outputs.notebooks_links }}
+          args: --no-progress ${{ steps.link_views.outputs.files }}
           output: ${{ runner.temp }}/qa_links.md
           format: markdown
           fail: true
