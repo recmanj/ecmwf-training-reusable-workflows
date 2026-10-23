@@ -139,7 +139,7 @@ jobs:
       - name: Install QA tools
         working-directory: .tmp/${{ github.run_id }}-qa-tools
         run: |
-          uv sync --frozen --no-install-project
+          uv sync --frozen --no-install-project --no-dev
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
       # Load QA configuration
@@ -328,6 +328,8 @@ jobs:
           DATA_SOURCE_OUTCOME: ${{ steps.data_source_checker.outcome }}
           LICENSE_OUTCOME: ${{ steps.license.outcome }}
           CHANGELOG_OUTCOME: ${{ steps.changelog.outcome }}
+          # Bounded excerpts keep each *_error output far below the summary job's 128 KiB per-env-var limit
+          EXCERPT: .tmp/${{ github.run_id }}-qa-tools/process-notebooks/checkers/error_excerpt.py
         run: |
           emit() {
             name="$1"
@@ -337,7 +339,7 @@ jobs:
             [ -s "$file" ] || return 0
             {
               echo "${name}<<__QA_ERR_EOF__"
-              tail -n 20 "$file" | sed -r 's/\x1b\[[0-9;]*[mGKH]//g'
+              python "$EXCERPT" "$file" || true
               echo "__QA_ERR_EOF__"
             } >> "$GITHUB_OUTPUT"
           }
@@ -358,7 +360,7 @@ jobs:
             [ -n "$link_errors" ] || link_errors=$(tail -n 20 "$RUNNER_TEMP/qa_links.md")
             {
               echo "link_error<<__QA_ERR_EOF__"
-              printf '%s\n' "$link_errors" | sed -r 's/\x1b\[[0-9;]*[mGKH]//g'
+              printf '%s\n' "$link_errors" | python "$EXCERPT" - || true
               echo "__QA_ERR_EOF__"
             } >> "$GITHUB_OUTPUT"
           fi
@@ -396,7 +398,7 @@ jobs:
 
       - name: Install QA tools
         working-directory: .tmp/${{ github.run_id }}-qa-tools
-        run: uv sync --frozen --no-install-project
+        run: uv sync --frozen --no-install-project --no-dev
 
       # Load QA config to check if execute is disabled and to validate performance thresholds
       - name: Load QA config
@@ -469,12 +471,15 @@ jobs:
         if: success() || failure()
         env:
           EXECUTE_OUTCOME: ${{ steps.execute_notebooks.outcome }}
+          EXCERPT: .tmp/${{ github.run_id }}-qa-tools/process-notebooks/checkers/error_excerpt.py
         run: |
           file="$RUNNER_TEMP/qa_execute.log"
           if [ "$EXECUTE_OUTCOME" = "failure" ] && [ -s "$file" ]; then
             {
               echo "execute_error<<__QA_ERR_EOF__"
-              tail -n 20 "$file" | sed -r 's/\x1b\[[0-9;]*[mGKH]//g'
+              # The raw tail can hold thousands of \r-joined tqdm updates on one line; the summary job
+              # receives this as an env var (128 KiB limit), so pass a bounded excerpt instead
+              python3 "$EXCERPT" "$file" || true
               echo "__QA_ERR_EOF__"
             } >> "$GITHUB_OUTPUT"
           fi
