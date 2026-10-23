@@ -93,6 +93,11 @@ jobs:
   lint:
     needs: collect
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        # explicit bash => `bash --noprofile --norc -eo pipefail {0}`; the implicit default
+        # `bash -e {0}` has no pipefail, so `check | tee log` always took tee's exit status (0)
+        shell: bash
     outputs:
       linter_result: ${{ steps.linter.outcome }}
       formatter_result: ${{ steps.formatter.outcome }}
