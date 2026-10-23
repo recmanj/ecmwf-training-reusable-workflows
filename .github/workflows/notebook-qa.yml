@@ -179,34 +179,54 @@ jobs:
         env:
           NOTEBOOKS: ${{ steps.config.outputs.notebooks_pynblint }}
           PYNBLINT_EXCLUDE: ${{ steps.config.outputs.pynblint_exclude }}
+          # Plain Python tracebacks instead of Rich panels, so a crash reason fits on one line
+          _TYPER_STANDARD_TRACEBACK: "1"
         run: |
           {
           mapfile -t nbs <<< "$NOTEBOOKS"
           failed=0
+          results="$RUNNER_TEMP/qa_pynblint_results.log"
+          run_log="$RUNNER_TEMP/pynblint_run.log"
+          : > "$results"
           for nb in "${nbs[@]}"; do
             echo "Checking: $nb"
-            output_file="/tmp/pynblint_$(basename "$nb" .ipynb).json"
+            output_file="$RUNNER_TEMP/pynblint_$(basename "$nb" .ipynb).json"
+            rm -f "$output_file"
+            args=("$nb" -o "$output_file")
             if [ -n "$PYNBLINT_EXCLUDE" ]; then
-              pynblint "$nb" -o "$output_file" --exclude "$PYNBLINT_EXCLUDE"
-            else
-              pynblint "$nb" -o "$output_file"
+              args+=(--exclude "$PYNBLINT_EXCLUDE")
             fi
-
-            # Parse JSON to check for lints (pynblint always exits 0)
-            lint_count=$(python -c "import json; print(len(json.load(open('$output_file'))['lints']))")
-            if [ "$lint_count" -gt 0 ]; then
-              echo "❌ $nb has $lint_count pynblint issue(s):"
-              python -c "
-          import json
-          data = json.load(open('$output_file'))
-          for lint in data['lints']:
-              print(f\"  - ({lint['slug']}) {lint['description']}\")
-          "
+            # pynblint exits 0 even when it reports lints, so a non-zero exit (or no report) means it crashed
+            rc=0
+            pynblint "${args[@]}" 2>&1 | tee "$run_log" || rc=$?
+            if [ "$rc" -ne 0 ] || [ ! -s "$output_file" ]; then
+              reason=$(sed -r 's/\x1b\[[0-9;?]*[A-Za-z]//g' "$run_log" | grep -v '^[[:space:]]*$' | tail -n 1 || true)
+              echo "❌ $nb: pynblint crashed (exit code $rc): ${reason:-no output}" >> "$results"
               failed=1
-            else
-              echo "✅ $nb passed pynblint"
+              continue
             fi
+            python - "$nb" "$output_file" >> "$results" << 'EOF' || failed=1
+          import json
+          import sys
+
+          nb, path = sys.argv[1], sys.argv[2]
+          try:
+              with open(path, encoding="utf-8") as fh:
+                  lints = json.load(fh)["lints"]
+          except (OSError, ValueError, KeyError, TypeError) as exc:
+              print(f"❌ {nb}: could not read pynblint report ({type(exc).__name__}: {exc})")
+              sys.exit(1)
+          if not lints:
+              print(f"✅ {nb} passed pynblint")
+              sys.exit(0)
+          print(f"❌ {nb} has {len(lints)} pynblint issue(s):")
+          for lint in lints:
+              print(f"  - ({lint.get('slug')}) {lint.get('description')}")
+          sys.exit(1)
+          EOF
           done
+          echo "pynblint results:"
+          cat "$results"
           exit $failed
           } 2>&1 | tee "$RUNNER_TEMP/qa_pynblint.log"
 
@@ -323,7 +343,10 @@ jobs:
           }
           emit linter_error "$LINTER_OUTCOME" "$RUNNER_TEMP/qa_linter.log"
           emit formatter_error "$FORMATTER_OUTCOME" "$RUNNER_TEMP/qa_formatter.log"
-          emit pynblint_error "$PYNBLINT_OUTCOME" "$RUNNER_TEMP/qa_pynblint.log"
+          # Prefer the per-notebook result lines over the tail of the raw pynblint output
+          pynblint_log="$RUNNER_TEMP/qa_pynblint_results.log"
+          [ -s "$pynblint_log" ] || pynblint_log="$RUNNER_TEMP/qa_pynblint.log"
+          emit pynblint_error "$PYNBLINT_OUTCOME" "$pynblint_log"
           emit figure_error "$FIGURE_OUTCOME" "$RUNNER_TEMP/qa_figure.log"
           emit metadata_error "$METADATA_OUTCOME" "$RUNNER_TEMP/qa_metadata.log"
           emit data_source_error "$DATA_SOURCE_OUTCOME" "$RUNNER_TEMP/qa_data_source.log"
